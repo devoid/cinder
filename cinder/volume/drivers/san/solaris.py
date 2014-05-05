@@ -169,14 +169,11 @@ class SolarisISCSIDriver(SanISCSIDriver):
             if items[2] == zvol_name:
                 luid = items[0].strip()
                 return luid
-
-        msg = _('LUID not found for %(zfs_poolname)s. '
-                'Output=%(out)s') % {'zfs_poolname': zfs_poolname, 'out': out}
-        raise exception.VolumeBackendAPIException(data=msg)
+        return None
 
     def _is_lu_created(self, volume):
         luid = self._get_luid(volume)
-        return luid
+        return luid if luid is not None else False
 
     def delete_volume(self, volume):
         """Deletes a volume."""
@@ -209,6 +206,11 @@ class SolarisISCSIDriver(SanISCSIDriver):
             self._execute('/usr/sbin/sbdadm', 'create-lu', zvol_name)
 
         luid = self._get_luid(volume)
+        if luid is None:
+            msg = (_('Failed to create logical unit for %(zfs_poolname)') %
+                   {'zfs_poolname': zfs_poolname})
+            raise exception.VolumeBackendAPIException(data=msg)
+
         iscsi_name = self._build_iscsi_target_name(volume)
         target_group_name = 'tg-%s' % volume['name']
 
@@ -250,7 +252,7 @@ class SolarisISCSIDriver(SanISCSIDriver):
         iscsi_name = self._build_iscsi_target_name(volume)
         target_group_name = 'tg-%s' % volume['name']
 
-        if self._view_exists(luid):
+        if luid is not None and self._view_exists(luid):
             self._execute('/usr/sbin/stmfadm', 'remove-view', '-l', luid, '-a')
 
         if self._iscsi_target_exists(iscsi_name):
